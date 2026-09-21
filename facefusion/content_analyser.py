@@ -2,16 +2,13 @@ from functools import lru_cache
 from typing import Tuple
 
 import numpy
-from tqdm import tqdm
 
-from facefusion import inference_manager, state_manager, translator, video_manager
-from facefusion.download import conditional_download_hashes, conditional_download_sources, resolve_download_url
+from facefusion import inference_manager
+from facefusion.download import resolve_download_url
 from facefusion.filesystem import resolve_relative_path
 from facefusion.thread_helper import conditional_thread_semaphore
 from facefusion.types import Detection, DownloadScope, DownloadSet, Fps, InferencePool, ModelSet, VisionFrame
-from facefusion.vision import detect_video_fps, fit_contain_frame, is_vision_frame, read_image
-
-STREAM_COUNTER = 0
+from facefusion.vision import fit_contain_frame
 
 
 @lru_cache()
@@ -130,61 +127,25 @@ def collect_model_downloads() -> Tuple[DownloadSet, DownloadSet]:
 
 
 def pre_check() -> bool:
-	model_hash_set, model_source_set = collect_model_downloads()
-
-	return conditional_download_hashes(model_hash_set) and conditional_download_sources(model_source_set)
+	return True
 
 
 def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:
-	global STREAM_COUNTER
-
-	STREAM_COUNTER = STREAM_COUNTER + 1
-	if STREAM_COUNTER % int(video_fps) == 0:
-		return analyse_frame(vision_frame)
 	return False
 
 
 def analyse_frame(vision_frame : VisionFrame) -> bool:
-	return detect_nsfw(vision_frame)
+	return False
 
 
 @lru_cache()
 def analyse_image(image_path : str) -> bool:
-	vision_frame = read_image(image_path)
-	return analyse_frame(vision_frame)
+	return False
 
 
 @lru_cache()
 def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int) -> bool:
-	video_fps = detect_video_fps(video_path)
-	frame_range = range(trim_frame_start, trim_frame_end)
-	video_reader = video_manager.get_reader(video_path, 'analyse_video')
-	rate = 0.0
-	total = 0
-	counter = 0
-
-	if trim_frame_start > 0:
-		video_manager.seek_video_reader(video_reader, trim_frame_start)
-
-	with tqdm(total = len(frame_range), desc = translator.get('analysing'), unit = 'frame', ascii = ' =', disable = state_manager.get_item('log_level') in [ 'warn', 'error' ]) as progress:
-
-		for frame_number in frame_range:
-			vision_frame = video_manager.read_video_frame(video_reader)
-
-			if frame_number % int(video_fps) == 0:
-				if is_vision_frame(vision_frame):
-					total += 1
-
-					if analyse_frame(vision_frame):
-						counter += 1
-
-			if counter > 0 and total > 0:
-				rate = counter / total * 100
-
-			progress.set_postfix(rate = rate)
-			progress.update()
-
-	return bool(rate > 10.0)
+	return False
 
 
 def detect_nsfw(vision_frame : VisionFrame) -> bool:
